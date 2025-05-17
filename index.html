@@ -1,0 +1,1686 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>RDTech TC66C Dashboard</title>
+    <!-- CryptoJS (for AES-ECB) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+    <!-- Apache ECharts -->
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.4.3/dist/echarts.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #4a90e2;
+            --secondary-color: #6c757d;
+            --success-color: #28a745;
+            --warning-color: #f0ad4e;
+            --danger-color: #e24a4a;
+            --dark-bg: #212529;
+            --light-bg: #f8f9fa;
+        }
+
+        body {
+            background-color: #f5f8fa;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            padding-bottom: 20px;
+        }
+
+        .navbar-brand {
+            font-weight: bold;
+            font-size: 1.5rem;
+        }
+
+        .card {
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+            margin-bottom: 20px;
+            border: none;
+            border-radius: 10px;
+        }
+
+        .card-header {
+            background-color: var(--light-bg);
+            border-bottom: 1px solid rgba(0, 0, 0, 0.125);
+            font-weight: bold;
+        }
+
+        .btn-circle {
+            width: 50px;
+            height: 50px;
+            padding: 10px 16px;
+            border-radius: 25px;
+            text-align: center;
+            font-size: 18px;
+            line-height: 1.33;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 5px;
+        }
+
+        .status-connected {
+            background-color: var(--success-color);
+        }
+
+        .status-disconnected {
+            background-color: var(--danger-color);
+        }
+
+        #commandIndicator {
+            color: var(--danger-color);
+            font-weight: bold;
+            margin-bottom: 5px;
+            display: none;
+        }
+
+        #status {
+            color: var(--primary-color);
+            margin-bottom: 10px;
+            font-style: italic;
+            display: none;
+        }
+
+        #debugInfo {
+            color: var(--secondary-color);
+            font-size: 10px;
+            display: none;
+        }
+
+        .chart-container {
+            height: 250px;
+            width: 100%;
+        }
+
+        .value-display {
+            font-size: 2rem;
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .value-unit {
+            font-size: 1rem;
+            color: var(--secondary-color);
+        }
+
+        .muted-text {
+            color: var(--secondary-color);
+        }
+
+        .measurement-card {
+            text-align: center;
+            padding: 15px;
+        }
+
+        .measurement-value {
+            font-size: 1.5rem;
+            font-weight: bold;
+        }
+
+        .measurement-label {
+            font-size: 0.9rem;
+            color: var(--secondary-color);
+        }
+
+        button:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        #output {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 10px;
+            white-space: pre-wrap;
+            font-family: monospace;
+            font-size: 14px;
+            height: 150px;
+            overflow-y: auto;
+        }
+
+        @media (max-width: 768px) {
+            .chart-container {
+                height: 200px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <!-- Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
+        <div class="container-fluid">
+            <a class="navbar-brand" href="#">
+                <i class="bi bi-lightning-charge-fill text-warning"></i> TC66C Dashboard
+            </a>
+            <div class="ms-auto d-flex align-items-center">
+                <div class="d-flex me-3">
+                    <button id="connectBluetooth" class="btn btn-sm btn-primary me-2">
+                        <i class="bi bi-bluetooth"></i> Connect BT
+                    </button>
+                    <button id="connectUSB" class="btn btn-sm btn-success me-2">
+                        <i class="bi bi-usb-symbol"></i> Connect USB
+                    </button>
+                    <button id="disconnect" class="btn btn-sm btn-danger" disabled>
+                        <i class="bi bi-x-circle"></i> Disconnect
+                    </button>
+                </div>
+
+                <div id="controls" style="display: none;" class="d-flex">
+                    <div class="btn-group" role="group">
+                        <button id="prevPage" class="btn btn-sm btn-secondary">
+                            <i class="bi bi-arrow-left"></i> Previous Page
+                        </button>
+
+                        <button id="nextPage" class="btn btn-sm btn-secondary">
+                            <i class="bi bi-arrow-right"></i> Next Page
+                        </button>
+
+                        <button id="rotateScreen" class="btn btn-sm btn-secondary">
+                            <i class="bi bi-arrow-repeat"></i> Rotate
+                        </button>
+                    </div>
+                </div>
+                <div id="commandIndicator" style="display: none;">Command in progress...</div>
+                <div id="status" style="display: none;"></div>
+                <div class="connection-status mx-3">
+                    <span class="status-indicator status-disconnected" id="connectionIndicator"></span>
+                    <span class="text-light" id="connectionStatus">Disconnected</span>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container">
+
+
+        <!-- Main Dashboard -->
+        <div class="row mb-4">
+            <div class="col-md-4 mb-4 mb-md-0">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-lightning-charge me-2"></i> Voltage
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <div id="voltageGauge" class="chart-container flex-grow-1"></div>
+                        <div class="text-center mt-2">
+                            <span class="measurement-value" id="voltageValue">-- V</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4 mb-4 mb-md-0">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-battery-charging me-2"></i> Current
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <div id="currentGauge" class="chart-container flex-grow-1"></div>
+                        <div class="text-center mt-2">
+                            <span class="measurement-value" id="currentValue">-- A</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-header">
+                        <i class="bi bi-lightning me-2"></i> Power
+                    </div>
+                    <div class="card-body d-flex flex-column">
+                        <div id="powerGauge" class="chart-container flex-grow-1"></div>
+                        <div class="text-center mt-2">
+                            <span class="measurement-value" id="powerValue">-- W</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Secondary Metrics -->
+        <div class="row mb-4">
+            <div class="col-lg-8 mb-4 mb-lg-0">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-graph-up me-2"></i> Real-time Measurements
+                    </div>
+                    <div class="card-body">
+                        <div id="lineChart" class="chart-container" style="height: 300px;"></div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-lg-4">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-info-circle me-2"></i> Device Information
+                    </div>
+                    <div class="card-body">
+                        <table class="table table-sm">
+                            <tbody>
+                                <tr>
+                                    <td><strong>Product:</strong></td>
+                                    <td id="productInfo">--</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Version:</strong></td>
+                                    <td id="versionInfo">--</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Serial:</strong></td>
+                                    <td id="serialInfo">--</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Runs:</strong></td>
+                                    <td id="runsInfo">--</td>
+                                </tr>
+                                <tr>
+                                    <td><strong>Temperature:</strong></td>
+                                    <td id="temperatureInfo">-- °C</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Energy Metrics -->
+        <div class="row mb-4">
+            <div class="col-md-6 mb-4 mb-md-0">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-fuel-pump me-2"></i> Energy Group 0
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="measurement-card">
+                                    <div class="measurement-value" id="group0mAh">-- mAh</div>
+                                    <div class="measurement-label">Capacity</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="measurement-card">
+                                    <div class="measurement-value" id="group0mWh">-- mWh</div>
+                                    <div class="measurement-label">Energy</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-fuel-pump me-2"></i> Energy Group 1
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="measurement-card">
+                                    <div class="measurement-value" id="group1mAh">-- mAh</div>
+                                    <div class="measurement-label">Capacity</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="measurement-card">
+                                    <div class="measurement-value" id="group1mWh">-- mWh</div>
+                                    <div class="measurement-label">Energy</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Additional Metrics -->
+        <div class="row mb-4">
+            <div class="col-md-4 mb-4 mb-md-0">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-shield-check me-2"></i> Resistance
+                    </div>
+                    <div class="card-body">
+                        <div class="measurement-card">
+                            <div class="measurement-value" id="resistanceValue">--</div>
+                            <div class="measurement-label">Ohms (Ω)</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="card">
+                    <div class="card-header">
+                        <i class="bi bi-usb me-2"></i> USB Data Lines
+                    </div>
+                    <div class="card-body">
+                        <div class="row text-center">
+                            <div class="col-6">
+                                <div class="measurement-card">
+                                    <div class="measurement-value" id="dPlusVoltage">-- V</div>
+                                    <div class="measurement-label">D+ Voltage</div>
+                                </div>
+                            </div>
+                            <div class="col-6">
+                                <div class="measurement-card">
+                                    <div class="measurement-value" id="dMinusVoltage">-- V</div>
+                                    <div class="measurement-label">D- Voltage</div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS Bundle with Popper -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <script>
+        // ==== GATT UUIDs (from sigrok) ====
+        const TX_SERVICE_UUID = '0000ffe5-0000-1000-8000-00805f9b34fb';
+        const TX_CHAR_UUID = '0000ffe9-0000-1000-8000-00805f9b34fb';
+        const RX_SERVICE_UUID = '0000ffe0-0000-1000-8000-00805f9b34fb';
+        const RX_CHAR_UUID = '0000ffe4-0000-1000-8000-00805f9b34fb';
+
+        // ==== Static AES key for decrypting poll packets (AES-ECB) ====  [oai_citation:1‡sigrok](https://sigrok.org/wiki/RDTech_TC66C)
+        const AES_KEY_WORDS = [
+            0x5821fa56, 0x01b2f026, 0x87ff1204, 0x622a4fb0,
+            0x86f40260, 0x816f9a0b, 0xa7f10661, 0x9ab87288
+        ];
+        const AES_KEY = CryptoJS.lib.WordArray.create(AES_KEY_WORDS);
+
+        let txChar, rxChar, device = null;
+        let btPollingIntervalId = null;
+
+        let usbPort;
+        let usbReader;
+        let usbWriter;
+        let usbPollingIntervalId;
+
+        // Separate buffers for measurement data and command responses
+        let measurementDataBuffer = new Uint8Array(0);
+        let commandResponseBuffer = new Uint8Array(0);
+
+        // Flag to indicate we're waiting for a command response
+        let awaitingCommandResponse = false;
+        let lastCommandSent = '';
+
+        const EXPECTED_ENCRYPTED_LENGTH = 192; // As per sigrok, after command, 192 bytes of encrypted data
+        const textEncoder = new TextEncoder();
+
+        // Function to decrypt data (used by both BT and USB)
+        function decryptData(encryptedPacket) {
+            try {
+                const cipherWA = CryptoJS.lib.WordArray.create(encryptedPacket);
+                const plainWA = CryptoJS.AES.decrypt(
+                    { ciphertext: cipherWA },
+                    AES_KEY,
+                    { mode: CryptoJS.mode.ECB, padding: CryptoJS.pad.NoPadding }
+                );
+                const bytes = new Uint8Array(plainWA.sigBytes);
+                for (let i = 0; i < plainWA.sigBytes; i++) {
+                    const word = plainWA.words[i >>> 2];
+                    bytes[i] = (word >> (24 - 8 * (i % 4))) & 0xFF;
+                }
+                return bytes;
+            } catch (error) {
+                console.error('Decryption error:', error);
+                console.log('Failed packet length:', encryptedPacket.length);
+                console.log('First few bytes:', Array.from(encryptedPacket.slice(0, 10)));
+                throw new Error(`Decryption failed: ${error.message}`);
+            }
+        }
+
+        // Function to disconnect Bluetooth
+        async function disconnectBluetooth() {
+            if (device && device.gatt.connected) {
+                console.log('Disconnecting Bluetooth...');
+                device.gatt.disconnect(); // gattserverdisconnected event will handle further cleanup
+            }
+            if (btPollingIntervalId) {
+                clearInterval(btPollingIntervalId);
+                btPollingIntervalId = null;
+                console.log('Bluetooth polling stopped.');
+            }            // Reset buffers and flags
+            measurementDataBuffer = new Uint8Array(0);
+            commandResponseBuffer = new Uint8Array(0);
+            awaitingCommandResponse = false;
+
+            // Enable connect buttons if USB is also not connected
+            if (!usbPort) {
+                document.getElementById('connectBluetooth').disabled = false;
+                document.getElementById('connectUSB').disabled = false;
+                document.getElementById('disconnect').disabled = true;
+                updateConnectionStatus(false);
+            }
+            // txChar, rxChar are cleared in gattserverdisconnected
+        }
+
+        // Function to disconnect USB
+        async function disconnectUSB(silent = false) {
+            if (usbPollingIntervalId) {
+                clearInterval(usbPollingIntervalId);
+                usbPollingIntervalId = null;
+            }
+            if (usbReader) {
+                try {
+                    await usbReader.cancel();
+                    usbReader.releaseLock();
+                } catch (error) {
+                    if (!silent) console.warn('Error cancelling USB reader:', error);
+                }
+                usbReader = null;
+            }
+            if (usbWriter) {
+                try {
+                    // await usbWriter.close(); // Close is for the stream, not just releasing lock
+                    usbWriter.releaseLock();
+                } catch (error) {
+                    if (!silent) console.warn('Error releasing USB writer:', error);
+                }
+                usbWriter = null;
+            }
+            if (usbPort) {
+                try {
+                    await usbPort.close();
+                    if (!silent) console.log('USB port closed.');
+                } catch (error) {
+                    if (!silent) console.error('Error closing USB port:', error);
+                }
+                usbPort = null;
+            }
+
+            // Reset buffers and flags
+            measurementDataBuffer = new Uint8Array(0);
+            commandResponseBuffer = new Uint8Array(0);
+            awaitingCommandResponse = false;
+
+            if (!silent) {
+                document.getElementById('connectUSB').disabled = false;
+                if (!txChar) { // Only enable BT connect if BT is also disconnected
+                    document.getElementById('connectBluetooth').disabled = false;
+                }
+                document.getElementById('disconnect').disabled = true;
+
+                // Update connection status if no other connections are active
+                if (!txChar) {
+                    updateConnectionStatus(false);
+                }
+            }
+        }
+
+        document.getElementById('connectBluetooth').addEventListener('click', async () => {
+            await disconnectUSB(); // Ensure USB is disconnected first
+            measurementDataBuffer = new Uint8Array(0); // Reset buffer for new connection type
+            commandResponseBuffer = new Uint8Array(0); // Reset command buffer
+            awaitingCommandResponse = false; // Reset command mode
+            console.log('Connecting via Bluetooth...');
+
+            try {
+                if (btPollingIntervalId) { // Clear any old interval
+                    clearInterval(btPollingIntervalId);
+                    btPollingIntervalId = null;
+                }
+
+                if (!device) { // Only request device if it's not already obtained
+                    device = await navigator.bluetooth.requestDevice({
+                        filters: [{ services: [TX_SERVICE_UUID] }],
+                        optionalServices: [RX_SERVICE_UUID]
+                    });
+                    // Setup disconnect listener only once per device object
+                    device.addEventListener('gattserverdisconnected', () => {
+                        console.log('Bluetooth Device disconnected.');
+                        if (btPollingIntervalId) {
+                            clearInterval(btPollingIntervalId);
+                            btPollingIntervalId = null;
+                        }
+                        txChar = null;
+                        rxChar = null;
+                        console.log('Bluetooth gattserverdisconnected event fired.');
+
+                        // Re-enable connect buttons and disable disconnect if no other connections
+                        if (!usbPort) {
+                            document.getElementById('connectBluetooth').disabled = false;
+                            document.getElementById('connectUSB').disabled = false;
+                            document.getElementById('disconnect').disabled = true;
+                        }
+
+                        // Consider if `device = null;` is appropriate here or if you want to allow reconnecting to the same `device` object.
+                        // For now, keeping `device` allows trying to reconnect without re-requesting.
+                    });
+                }
+
+                if (device.gatt.connected) { // If already connected (e.g. to this device), disconnect first to ensure clean state
+                    console.log("Already connected to this Bluetooth device, disconnecting first for a clean slate.");
+                    device.gatt.disconnect(); // Wait for gattserverdisconnected
+                    // A short delay might be needed here, or a more robust state machine
+                    await new Promise(resolve => setTimeout(resolve, 500)); // Small delay
+                }
+
+
+                const server = await device.gatt.connect();
+                console.log('Connected to GATT server.');
+                const txService = await server.getPrimaryService(TX_SERVICE_UUID);
+                txChar = await txService.getCharacteristic(TX_CHAR_UUID);
+                const rxService = await server.getPrimaryService(RX_SERVICE_UUID);
+                rxChar = await rxService.getCharacteristic(RX_CHAR_UUID);
+                await rxChar.startNotifications();
+                rxChar.addEventListener('characteristicvaluechanged', handleBluetoothNotification);
+
+                console.log('Bluetooth Connected — starting polling…');
+                toggleUIElement('controls', true);
+                toggleUIElement('status', true);
+                toggleCommandIndicator(false);
+
+                // Disable connect buttons and enable disconnect button
+                document.getElementById('connectBluetooth').disabled = true;
+                document.getElementById('connectUSB').disabled = true;
+                document.getElementById('disconnect').disabled = false;
+
+                // Update connection status and initialize charts
+                onConnectionSuccess('Bluetooth');
+
+                await pollDeviceBluetooth(); // Poll once immediately
+                btPollingIntervalId = setInterval(pollDeviceBluetooth, 2000);
+
+            } catch (err) {
+                console.error("Bluetooth Connection Error:", err);
+                if (btPollingIntervalId) clearInterval(btPollingIntervalId);
+                // device = null; // Optionally reset device on error
+            }
+        });
+
+        document.getElementById('connectUSB').addEventListener('click', async () => {
+            await disconnectBluetooth(); // Ensure Bluetooth is disconnected first
+            await disconnectUSB(true); // Silently disconnect previous USB session if any
+            measurementDataBuffer = new Uint8Array(0); // Reset measurement buffer
+            commandResponseBuffer = new Uint8Array(0); // Reset command buffer
+            awaitingCommandResponse = false; // Reset command mode
+            console.log('Connecting via USB...');
+
+            if (!navigator.serial) {
+                alert('WebSerial API not supported by your browser. Please use a compatible browser like Chrome or Edge.');
+                return;
+            }
+
+            try {
+                if (usbPollingIntervalId) { // Clear any old interval
+                    clearInterval(usbPollingIntervalId);
+                    usbPollingIntervalId = null;
+                }
+
+                usbPort = await navigator.serial.requestPort();
+                await usbPort.open({ baudRate: 115200 }); // Common baud rate
+                console.log('USB port opened.');
+
+                usbWriter = usbPort.writable.getWriter();
+                usbReader = usbPort.readable.getReader();
+
+                console.log('USB Connected — starting polling…');
+                toggleUIElement('controls', true);
+                toggleUIElement('status', true);
+                toggleCommandIndicator(false);
+
+                // Disable connect buttons and enable disconnect button
+                document.getElementById('connectBluetooth').disabled = true;
+                document.getElementById('connectUSB').disabled = true;
+                document.getElementById('disconnect').disabled = false;
+
+                // Update connection status and initialize charts
+                onConnectionSuccess('USB');
+
+                await pollDeviceUSB(); // Poll once immediately
+                usbPollingIntervalId = setInterval(pollDeviceUSB, 2000);
+
+                readLoopUSB(); // Start reading from USB
+
+            } catch (err) {
+                console.error("USB Connection Error:", err);
+                await disconnectUSB(); // Clean up on error
+            }
+        });
+
+
+        document.getElementById('disconnect').addEventListener('click', async () => {
+            console.log('Disconnect button clicked.');
+            const wasBluetoothConnected = device && device.gatt.connected;
+            // Check usbPort directly as usbPort.readable might not be set if never fully opened
+            const wasUsbConnected = !!usbPort;
+
+            await disconnectBluetooth();
+            await disconnectUSB();
+
+            if (!wasBluetoothConnected && !wasUsbConnected) {
+                console.log('No active connection to disconnect.');
+            } else if (wasBluetoothConnected && !wasUsbConnected) {
+                // Message is set by gattserverdisconnected
+            } else if (!wasBluetoothConnected && wasUsbConnected) {
+                // Message is set by disconnectUSB
+            } else { // Both were somehow active or transitioning
+                console.log('All connections attempt to close.');
+            }
+
+            // Hide controls and status when disconnected
+            toggleUIElement('controls', false);
+            toggleUIElement('status', false);
+            toggleCommandIndicator(false);
+
+            // Enable connect buttons and disable disconnect button
+            document.getElementById('connectBluetooth').disabled = false;
+            document.getElementById('connectUSB').disabled = false;
+            document.getElementById('disconnect').disabled = true;
+
+            // Reset display values
+            resetDisplayValues();
+        });        // Helper function to determine which commands expect responses
+        function commandExpectsResponse(command) {
+            // Commands that don't need responses
+            const noResponseCommands = ['lastp', 'nextp', 'rotat'];
+            // Return true if the command needs a response
+            return !noResponseCommands.includes(command);
+        }
+
+        // Helper function to format command based on connection type
+        function formatCommand(command, isBluetooth) {
+            // For Bluetooth, add 'b' prefix and '\r\n' suffix
+            if (isBluetooth) {
+                // If command already starts with 'b', don't add another one
+                if (!command.startsWith('b')) {
+                    command = 'b' + command;
+                }
+                // Add \r\n if not already there
+                if (!command.endsWith('\r\n')) {
+                    command = command + '\r\n';
+                }
+            }
+            // For USB, ensure no prefix or suffix
+            else {
+                // If command starts with 'b', remove it for USB
+                if (command.startsWith('b')) {
+                    command = command.substring(1);
+                }
+                // Remove \r\n if present for USB
+                if (command.endsWith('\r\n')) {
+                    command = command.substring(0, command.length - 2);
+                }
+            }
+
+            return command;
+        }
+        // Command functions for both BT and USB
+        async function sendCommand(command, waitForResponse = true) {
+            let sent = false;
+            let formattedCommand;
+            let originalCommand = command; // Store original command for logging and timeout
+
+            // Reset command response buffer and set awaiting flag before sending
+            commandResponseBuffer = new Uint8Array(0);
+
+            // Format command based on connection type
+            if (txChar && device && device.gatt.connected) {
+                formattedCommand = formatCommand(command, true); // Format for Bluetooth
+            } else if (usbWriter && usbPort && usbPort.readable) {
+                formattedCommand = formatCommand(command, false); // Format for USB
+            } else {
+                formattedCommand = command; // No active connection, keep original
+            }
+
+            // Don't set awaiting command flag for regular measurement polling or commands that don't need a response
+            const isPollingCommand = originalCommand === 'getva' || originalCommand === 'bgetva';
+
+            if (!isPollingCommand && waitForResponse) {
+                awaitingCommandResponse = true;
+                lastCommandSent = originalCommand; // Store original command for reference
+                console.log(`Awaiting response for command: ${originalCommand} (formatted: ${formattedCommand})`);
+
+                // Show command indicator
+                toggleCommandIndicator(true);
+
+                // Set timeout to clear command mode if no response is received
+                setTimeout(() => {
+                    if (awaitingCommandResponse && lastCommandSent === originalCommand) {
+                        console.log(`Command response timeout for: ${originalCommand}`);
+                        updateStatus(`No response for command: ${originalCommand}`);
+                        awaitingCommandResponse = false;
+                        toggleCommandIndicator(false);
+                    }
+                }, 5000); // 5 second timeout
+            }
+
+            if (txChar && device && device.gatt.connected) {
+                try {
+                    const encoder = new TextEncoder();
+                    await txChar.writeValue(encoder.encode(formattedCommand));
+                    console.log(`Sent command via Bluetooth: ${formattedCommand}`);
+                    sent = true;
+                } catch (error) {
+                    console.error(`Error sending "${formattedCommand}" via Bluetooth:`, error);
+                    awaitingCommandResponse = false; // Reset on error
+                }
+            } else if (usbWriter && usbPort && usbPort.readable) {
+                try {
+                    await usbWriter.write(textEncoder.encode(formattedCommand));
+                    console.log(`Sent command via USB: ${formattedCommand}`);
+                    sent = true;
+                } catch (error) {
+                    console.error(`Error sending "${formattedCommand}" via USB:`, error);
+                    awaitingCommandResponse = false; // Reset on error
+                }
+            }
+
+            if (!sent) {
+                console.warn('No active connection to send command.');
+                awaitingCommandResponse = false;
+            }
+            return sent;
+        }        // Event listeners for command buttons
+
+        document.getElementById('prevPage').addEventListener('click', () => {
+            sendCommand('lastp', commandExpectsResponse('lastp'));
+            // updateStatus('Sent command: Previous page (no response expected)'); // Removed
+        });
+
+        document.getElementById('nextPage').addEventListener('click', () => {
+            sendCommand('nextp', commandExpectsResponse('nextp'));
+            // updateStatus('Sent command: Next page (no response expected)'); // Removed
+        });
+
+        document.getElementById('rotateScreen').addEventListener('click', () => {
+            sendCommand('rotat', commandExpectsResponse('rotat'));
+            // updateStatus('Sent command: Rotate screen (no response expected)'); // Removed
+        });
+
+        async function pollDeviceBluetooth() {
+            if (txChar && device.gatt.connected) {
+                try {
+                    // Don't send polling command if we're waiting for a command response
+                    if (awaitingCommandResponse) {
+                        console.log('Skipping BT poll because we are awaiting a command response');
+                        return;
+                    }
+
+                    // Use the proper formatted command for Bluetooth with \r\n
+                    const formattedCommand = formatCommand('getva', true); // Will return 'bgetva\r\n'
+                    const encoder = new TextEncoder();
+                    await txChar.writeValue(encoder.encode(formattedCommand));
+                    console.log(`Sent BT poll command: ${formattedCommand}`);
+                } catch (error) {
+                    console.error('Error writing poll command:', error);
+                    // Stop polling on error
+                    if (btPollingIntervalId) {
+                        clearInterval(btPollingIntervalId);
+                        btPollingIntervalId = null;
+                    }
+                }
+            } else {
+                // Device disconnected or txChar not available
+                if (btPollingIntervalId) {
+                    clearInterval(btPollingIntervalId);
+                    btPollingIntervalId = null;
+                }
+            }
+        }
+
+        function handleBluetoothNotification(evt) {
+            const newDataChunk = new Uint8Array(evt.target.value.buffer);
+
+            // Check for 'boot' or 'firm' response (4 bytes from query command)
+            if (newDataChunk.length === 4) {
+                const responseText = new TextDecoder().decode(newDataChunk);
+                console.log(`Received 4-byte response: ${responseText}`);
+
+                if (responseText === 'boot' || responseText === 'firm') {
+                    updateStatus(`Device state: ${responseText}`);
+                    awaitingCommandResponse = false;
+                    toggleCommandIndicator(false);
+                    return;
+                }
+            }
+
+            // If we're awaiting a command response, add to command buffer
+            if (awaitingCommandResponse) {
+                // Concatenate new data with existing command buffer
+                const tempBuffer = new Uint8Array(commandResponseBuffer.length + newDataChunk.length);
+                tempBuffer.set(commandResponseBuffer);
+                tempBuffer.set(newDataChunk, commandResponseBuffer.length);
+                commandResponseBuffer = tempBuffer;
+
+                // Try to process command response
+                const textDecoder = new TextDecoder();
+                const responseText = textDecoder.decode(commandResponseBuffer);
+                console.log("Raw command response:", responseText);
+
+                // If this appears to be structured data (not just binary)
+                if (!responseText.match(/^[\x00-\x1F\x7F-\xFF]+$/)) { // Not just binary data
+                    try {
+                        // Try to parse as JSON if it looks like structured data
+                        if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
+                            const data = JSON.parse(responseText);
+                            updateStatus(`Command response received: ${lastCommandSent}`);
+                            console.log("Parsed data:", JSON.stringify(data, null, 2));
+
+                            // Clear command mode and buffer
+                            awaitingCommandResponse = false;
+                            commandResponseBuffer = new Uint8Array(0);
+                            toggleCommandIndicator(false);
+                        }
+                        // Otherwise display as text if it's a simple text response
+                        else if (responseText.length > 0) {
+                            updateStatus(`Response: ${responseText}`);
+
+                            // Clear command mode and buffer
+                            awaitingCommandResponse = false;
+                            commandResponseBuffer = new Uint8Array(0);
+                            toggleCommandIndicator(false);
+                        }
+                    } catch (e) {
+                        // Not complete JSON yet, keep accumulating
+                        console.log("Continuing to accumulate command response data");
+                    }
+                }
+            }
+            // If this is measurement data (not awaiting command response), handle normally
+            else {
+                // Concatenate new data with existing measurement buffer
+                const tempBuffer = new Uint8Array(measurementDataBuffer.length + newDataChunk.length);
+                tempBuffer.set(measurementDataBuffer);
+                tempBuffer.set(newDataChunk, measurementDataBuffer.length);
+                measurementDataBuffer = tempBuffer;
+
+                // Process full packets from the buffer
+                while (measurementDataBuffer.length >= EXPECTED_ENCRYPTED_LENGTH) {
+                    const completePacket = measurementDataBuffer.slice(0, EXPECTED_ENCRYPTED_LENGTH);
+                    measurementDataBuffer = measurementDataBuffer.slice(EXPECTED_ENCRYPTED_LENGTH);
+                    try {
+                        const decryptedBytes = decryptData(completePacket);
+                        parseAndDisplay(decryptedBytes);
+                    } catch (err) {
+                        console.error('Error processing BT measurement data:', err);
+                        // Reset the buffer on error
+                        measurementDataBuffer = new Uint8Array(0);
+                    }
+                }
+            }
+        }
+
+        // USB Specific Functions
+        async function pollDeviceUSB() {
+            if (usbWriter && usbPort && usbPort.readable) {
+                try {
+                    // Don't send polling command if we're waiting for a command response
+                    if (awaitingCommandResponse) {
+                        console.log('Skipping USB poll because we are awaiting a command response');
+                        return;
+                    }
+
+                    // Use the proper formatted command for USB
+                    const formattedCommand = formatCommand('getva', false); // Will return 'getva'
+                    await usbWriter.write(textEncoder.encode(formattedCommand));
+                    console.log(`Sent USB poll command: ${formattedCommand}`);
+                } catch (error) {
+                    console.error('Error writing USB poll command:', error);
+                    await disconnectUSB(); // Disconnect on write error
+                }
+            } else {
+                console.log('USB writer not available or port closed. Stopping USB poll.');
+                await disconnectUSB(); // Ensure cleanup
+            }
+        }
+
+        // Function to update debug info
+        function updateDebugInfo() {
+            const debugEl = document.getElementById('debugInfo');
+            if (!debugEl) return; // Safely handle missing element
+
+            if (debugEl.style.display === 'block') {
+                let commandStatus = 'Inactive';
+                if (awaitingCommandResponse) {
+                    commandStatus = `Active - waiting for '${lastCommandSent}' response`;
+                }
+
+                debugEl.textContent = `Measurement buffer: ${measurementDataBuffer.length} bytes | Command buffer: ${commandResponseBuffer.length} bytes | Command mode: ${commandStatus}`;
+            }
+        }
+
+        // Add debug toggle - ctrl+d to toggle debug info
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'd') {
+                const debugEl = document.getElementById('debugInfo');
+                if (!debugEl) return; // Safely handle missing element
+
+                if (debugEl.style.display === 'none' || debugEl.style.display === '') {
+                    debugEl.style.display = 'block';
+                    updateDebugInfo();
+                    // Update debug info periodically while visible
+                    window.debugInterval = setInterval(updateDebugInfo, 1000);
+                } else {
+                    debugEl.style.display = 'none';
+                    if (window.debugInterval) {
+                        clearInterval(window.debugInterval);
+                    }
+                }
+            }
+        });
+
+        // Function to safely toggle command indicator
+        function toggleCommandIndicator(show) {
+            const indicator = document.getElementById('commandIndicator');
+            if (indicator) {
+                indicator.style.display = show ? 'block' : 'none';
+            }
+        }
+
+        // Function to safely toggle UI elements
+        function toggleUIElement(elementId, show) {
+            const element = document.getElementById(elementId);
+            if (element) {
+                element.style.display = show ? 'block' : 'none';
+            }
+        }        // Utility function to update status without affecting the measurements display
+        function updateStatus(message) {
+            const statusEl = document.getElementById('status');
+            if (!statusEl) return; // Safely handle missing element
+
+            statusEl.textContent = message;
+            // Make sure status is visible if we're updating it
+            toggleUIElement('status', true);
+            console.log(`Status: ${message}`);
+
+            // Also log current buffer state for debugging
+            console.log(`Current state - Command Mode: ${awaitingCommandResponse}, Last Command: ${lastCommandSent}`);
+            console.log(`Measurement buffer length: ${measurementDataBuffer.length}, Command buffer length: ${commandResponseBuffer.length}`);
+
+            // Update the debug info display
+            updateDebugInfo();
+
+            // Clear status message after 3 seconds
+            setTimeout(() => {
+                if (statusEl.textContent === message) {
+                    statusEl.textContent = '';
+                }
+            }, 3000);
+        }
+
+        async function readLoopUSB() {
+            while (usbPort && usbPort.readable && usbReader) {
+                try {
+                    const { value, done } = await usbReader.read();
+                    if (done) {
+                        console.log('USB Reader stream has been closed.');
+                        break;
+                    }
+                    if (value) {
+                        // Check for 'boot' or 'firm' response (4 bytes from query command)
+                        if (value.length === 4) {
+                            const responseText = new TextDecoder().decode(value);
+                            console.log(`Received 4-byte USB response: ${responseText}`);
+
+                            if (responseText === 'boot' || responseText === 'firm') {
+                                updateStatus(`Device state: ${responseText}`);
+                                awaitingCommandResponse = false;
+                                toggleCommandIndicator(false);
+                                continue; // Skip further processing
+                            }
+                        }
+
+                        // If we're awaiting a command response, add to command buffer
+                        if (awaitingCommandResponse) {
+                            // Concatenate new data with existing command buffer
+                            const tempBuffer = new Uint8Array(commandResponseBuffer.length + value.length);
+                            tempBuffer.set(commandResponseBuffer);
+                            tempBuffer.set(value, commandResponseBuffer.length);
+                            commandResponseBuffer = tempBuffer;
+
+                            // Try to process command response
+                            const textDecoder = new TextDecoder();
+                            const responseText = textDecoder.decode(commandResponseBuffer);
+                            console.log("Raw USB command response:", responseText);
+
+                            // If this appears to be structured data (not just binary)
+                            if (!responseText.match(/^[\x00-\x1F\x7F-\xFF]+$/)) { // Not just binary data
+                                try {
+                                    // Try to parse as JSON if it looks like structured data
+                                    if (responseText.trim().startsWith('{') || responseText.trim().startsWith('[')) {
+                                        const data = JSON.parse(responseText);
+                                        updateStatus(`Command response received: ${lastCommandSent}`);
+                                        console.log("Parsed USB data:", JSON.stringify(data, null, 2));
+
+                                        // Clear command mode and buffer
+                                        awaitingCommandResponse = false;
+                                        commandResponseBuffer = new Uint8Array(0);
+                                        toggleCommandIndicator(false);
+                                    }
+                                    // Otherwise display as text if it's a simple text response
+                                    else if (responseText.length > 0) {
+                                        updateStatus(`Response: ${responseText}`);
+
+                                        // Clear command mode and buffer
+                                        awaitingCommandResponse = false;
+                                        commandResponseBuffer = new Uint8Array(0);
+                                        toggleCommandIndicator(false);
+                                    }
+                                } catch (e) {
+                                    // Not complete JSON yet, keep accumulating
+                                    console.log("Continuing to accumulate USB command response data");
+                                }
+                            }
+                        }
+                        // If this is measurement data (not awaiting command response), handle normally
+                        else {
+                            // Concatenate new data with existing measurement buffer
+                            const tempBuffer = new Uint8Array(measurementDataBuffer.length + value.length);
+                            tempBuffer.set(measurementDataBuffer);
+                            tempBuffer.set(value, measurementDataBuffer.length);
+                            measurementDataBuffer = tempBuffer;
+
+                            // Process full packets from the buffer
+                            while (measurementDataBuffer.length >= EXPECTED_ENCRYPTED_LENGTH) {
+                                const completePacket = measurementDataBuffer.slice(0, EXPECTED_ENCRYPTED_LENGTH);
+                                measurementDataBuffer = measurementDataBuffer.slice(EXPECTED_ENCRYPTED_LENGTH);
+                                try {
+                                    const decryptedBytes = decryptData(completePacket);
+                                    parseAndDisplay(decryptedBytes);
+                                } catch (err) {
+                                    console.error('Error processing USB measurement data:', err);
+                                    // Reset the buffer on error
+                                    measurementDataBuffer = new Uint8Array(0);
+                                }
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.error('USB Read Loop Error:', error);
+                    // Check if the error is due to the port being closed intentionally
+                    if (error.name === 'NetworkError' || error.message.includes('port has been closed')) {
+                        console.log('USB port was closed, exiting read loop.');
+                    } else {
+                        document.getElementById('output').textContent = 'USB Read Error: ' + error.message;
+                    }
+                    await disconnectUSB(); // Disconnect on other read errors
+                    break;
+                }
+            }
+            console.log('Exited USB read loop.');
+        }
+
+        function parseAndDisplay(buf) {
+            try {
+                const dv = new DataView(buf.buffer);
+
+                // Check if buffer is large enough for expected data
+                // pac1 is 64 bytes, pac2 is 64 bytes. We need at least 128 bytes for all currently parsed fields.
+                if (buf.length < 128) {
+                    console.error('Received buffer too short for pac1 and pac2:', buf.length);
+                    return;
+                }
+
+                // === pac1 (first 64 bytes) ===
+                const product = String.fromCharCode(...buf.slice(4, 8)); // Offset 4 within pac1
+                const version = String.fromCharCode(...buf.slice(8, 12)); // Offset 8 within pac1
+                const serial = dv.getUint32(12, true); // Offset 12 within pac1
+                const runs = dv.getUint32(44, true); // Offset 44 within pac1
+                const voltage = dv.getUint32(48, true) * 1e-4; // Offset 48 within pac1
+                const current = dv.getUint32(52, true) * 1e-5; // Offset 52 within pac1
+                const power = dv.getUint32(56, true) * 1e-4; // Offset 56 within pac1
+
+                // === pac2 (next 64 bytes, starting at overall offset 64) ===
+                const resistance = dv.getUint32(64 + 4, true) * 1e-2; // Offset 4 within pac2
+                const group0mAh = dv.getUint32(64 + 8, true);         // Offset 8 within pac2
+                const group0mWh = dv.getUint32(64 + 12, true);        // Offset 12 within pac2
+                const group1mAh = dv.getUint32(64 + 16, true);        // Offset 16 within pac2
+                const group1mWh = dv.getUint32(64 + 20, true);        // Offset 20 within pac2
+                const tempSign = dv.getUint32(64 + 24, true);         // Offset 24 within pac2
+                let temperature = dv.getUint32(64 + 28, true);        // Offset 28 within pac2
+                if (tempSign === 1) {
+                    temperature = -temperature;
+                }
+                const dPlusVoltage = dv.getUint32(64 + 32, true) * 1e-2; // Offset 32 within pac2
+                const dMinusVoltage = dv.getUint32(64 + 36, true) * 1e-2;// Offset 36 within pac2
+
+                // ---- Remove logging to missing #output element ----
+                // document.getElementById('output').textContent =
+                //     `Product: ${product} | Version: ${version} | Serial: ${serial} | Runs: ${runs}\n` +
+                //     `-----------------------------------------------------\n` +
+                //     `Voltage: ${voltage.toFixed(4)} V | Current: ${current.toFixed(5)} A | Power: ${power.toFixed(4)} W\n` +
+                //     `Resistance: ${resistance.toFixed(2)} Ω\n` +
+                //     `-----------------------------------------------------\n` +
+                //     `Group 0: ${group0mAh} mAh | ${group0mWh} mWh\n` +
+                //     `Group 1: ${group1mAh} mAh | ${group1mWh} mWh\n` +
+                //     `-----------------------------------------------------\n` +
+                //     `Temperature: ${temperature} °C\n` +
+                //     `D+ Voltage: ${dPlusVoltage.toFixed(2)} V | D- Voltage: ${dMinusVoltage.toFixed(2)} V\n`;
+
+                // Update dashboard UI elements with the values
+
+                // Update main measurements
+                document.getElementById('voltageValue').textContent = `${voltage.toFixed(3)} V`;
+                document.getElementById('currentValue').textContent = `${current.toFixed(4)} A`;
+                document.getElementById('powerValue').textContent = `${power.toFixed(3)} W`;
+
+                // Update resistance
+                document.getElementById('resistanceValue').textContent = resistance.toFixed(2);
+
+                // Update energy groups
+                document.getElementById('group0mAh').textContent = `${group0mAh} mAh`;
+                document.getElementById('group0mWh').textContent = `${group0mWh} mWh`;
+                document.getElementById('group1mAh').textContent = `${group1mAh} mAh`;
+                document.getElementById('group1mWh').textContent = `${group1mWh} mWh`;
+
+                // Update USB data lines
+                document.getElementById('dPlusVoltage').textContent = `${dPlusVoltage.toFixed(2)} V`;
+                document.getElementById('dMinusVoltage').textContent = `${dMinusVoltage.toFixed(2)} V`;
+
+                // Update device information
+                document.getElementById('productInfo').textContent = product;
+                document.getElementById('versionInfo').textContent = version;
+                document.getElementById('serialInfo').textContent = serial;
+                document.getElementById('runsInfo').textContent = runs;
+                document.getElementById('temperatureInfo').textContent = `${temperature} °C`;
+
+                // Update the charts
+                updateCharts(voltage, current, power);
+
+                // Add data to history for line chart
+                addDataPoint(voltage, current, power);
+
+            } catch (err) {
+                console.error('Error in parseAndDisplay:', err);
+                // remove fallback to #output:
+                // document.getElementById('output').textContent = 'Error parsing data: ' + err.message;
+            }
+        }
+
+        // Chart and visualization related code
+        // --------------------------------------
+
+        // Chart instances
+        let voltageGauge = null;
+        let currentGauge = null;
+        let powerGauge = null;
+        let lineChart = null;
+
+        // Data history for the line chart
+        const dataHistory = {
+            timestamps: [],
+            voltage: [],
+            current: [],
+            power: []
+        };
+
+        // Maximum number of data points to keep in history
+        const MAX_HISTORY_LENGTH = 60; // 60 data points (2 minutes at 2-second polling)
+
+        // Initialize all charts when connection is established
+        function initializeCharts() {
+            // Initialize gauge charts
+            initializeGaugeChart('voltageGauge', 'Voltage (V)', 0, 30, '#4a90e2');
+            initializeGaugeChart('currentGauge', 'Current (A)', 0, 5, '#e24a4a');
+            initializeGaugeChart('powerGauge', 'Power (W)', 0, 100, '#28a745');
+
+            // Initialize line chart
+            initializeLineChart();
+
+            // Clear history
+            dataHistory.timestamps = [];
+            dataHistory.voltage = [];
+            dataHistory.current = [];
+            dataHistory.power = [];
+        }
+
+        // Initialize a gauge chart
+        function initializeGaugeChart(elementId, name, min, max, color) {
+            const chartDom = document.getElementById(elementId);
+            const myChart = echarts.init(chartDom);
+
+            const option = {
+                series: [
+                    {
+                        type: 'gauge',
+                        startAngle: 180,
+                        endAngle: 0,
+                        center: ['50%', '75%'],
+                        radius: '90%',
+                        min: min,
+                        max: max,
+                        splitNumber: 8,
+                        axisLine: {
+                            lineStyle: {
+                                width: 6,
+                                color: [
+                                    [0.25, '#91c7ae'],
+                                    [0.5, '#63869e'],
+                                    [0.75, '#f0ad4e'],
+                                    [1, '#c23531']
+                                ]
+                            }
+                        },
+                        pointer: {
+                            icon: 'path://M12.8,0.7l12,40.1H0.7L12.8,0.7z',
+                            length: '12%',
+                            width: 20,
+                            offsetCenter: [0, '-60%'],
+                            itemStyle: {
+                                color: 'inherit'
+                            }
+                        },
+                        axisTick: {
+                            length: 12,
+                            lineStyle: {
+                                color: 'inherit',
+                                width: 2
+                            }
+                        },
+                        splitLine: {
+                            length: 20,
+                            lineStyle: {
+                                color: 'inherit',
+                                width: 5
+                            }
+                        },
+                        axisLabel: {
+                            color: '#999',
+                            fontSize: 12,
+                            distance: -60,
+                            formatter: function (value) {
+                                return value.toFixed(1);
+                            }
+                        },
+                        title: {
+                            offsetCenter: [0, '-20%'],
+                            fontSize: 14
+                        },
+                        detail: {
+                            fontSize: 15,
+                            offsetCenter: [0, '0%'],
+                            valueAnimation: true,
+                            formatter: function (value) {
+                                return value.toFixed(3);
+                            },
+                            color: 'inherit'
+                        },
+                        data: [
+                            {
+                                value: 0,
+                                name: name
+                            }
+                        ]
+                    }
+                ]
+            };
+
+            myChart.setOption(option);
+
+            // Save the chart instance for later updates
+            switch (elementId) {
+                case 'voltageGauge':
+                    voltageGauge = myChart;
+                    break;
+                case 'currentGauge':
+                    currentGauge = myChart;
+                    break;
+                case 'powerGauge':
+                    powerGauge = myChart;
+                    break;
+            }
+
+            // Handle resize
+            window.addEventListener('resize', function () {
+                myChart.resize();
+            });
+        }
+
+        // Initialize the line chart
+        function initializeLineChart() {
+            const chartDom = document.getElementById('lineChart');
+            const myChart = echarts.init(chartDom);
+
+            const option = {
+                tooltip: {
+                    trigger: 'axis',
+                    formatter: function (params) {
+                        const date = new Date(params[0].value[0]);
+                        const time = date.toLocaleTimeString();
+                        let tooltipText = `${time}<br/>`;
+
+                        params.forEach(param => {
+                            let value = param.value[1];
+                            let unit = '';
+
+                            if (param.seriesName === 'Voltage') unit = ' V';
+                            if (param.seriesName === 'Current') unit = ' A';
+
+                            tooltipText += `${param.marker} ${param.seriesName}: ${value !== undefined ? value.toFixed(3) : '0.000'}${unit}<br/>`;
+                        });
+
+                        return tooltipText;
+                    }
+                },
+                legend: {
+                    data: ['Voltage', 'Current'],
+                    left: 'center',   // reposition legend to center
+                    top: 10
+                },
+                grid: {
+                    left: '3%',
+                    right: '4%',
+                    bottom: '3%',
+                    top: '50px',
+                    containLabel: true
+                },
+                xAxis: {
+                    type: 'time',
+                    splitLine: {
+                        show: false
+                    },
+                    axisLabel: {
+                        formatter: function (value) {
+                            const date = new Date(value);
+                            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false });
+                        }
+                    }
+                },
+                yAxis: [
+                    {
+                        type: 'value',
+                        name: 'Voltage (V)',
+                        nameTextStyle: { color: '#4a90e2' },
+                        position: 'left',
+                        axisLine: { lineStyle: { color: '#4a90e2' } },
+                        axisLabel: { formatter: '{value} V' },
+                        splitLine: { lineStyle: { type: 'dashed' } }
+                    },
+                    {
+                        type: 'value',
+                        name: 'Current (A)',
+                        nameTextStyle: { color: '#e24a4a' },
+                        position: 'right',
+                        axisLine: { lineStyle: { color: '#e24a4a' } },
+                        axisLabel: { formatter: '{value} A' },
+                        splitLine: {
+                            show: false
+                        }
+                    }
+                ],
+                series: [
+                    {
+                        name: 'Voltage',
+                        type: 'line',
+                        yAxisIndex: 0,
+                        showSymbol: false,
+                        emphasis: {
+                            focus: 'series'
+                        },
+                        lineStyle: {
+                            width: 2,
+                            color: '#4a90e2'
+                        },
+                        data: []
+                    },
+                    {
+                        name: 'Current',
+                        type: 'line',
+                        yAxisIndex: 1,
+                        showSymbol: false,
+                        emphasis: {
+                            focus: 'series'
+                        },
+                        lineStyle: {
+                            width: 2,
+                            color: '#e24a4a'
+                        },
+                        data: []
+                    }
+                ]
+            };
+
+            myChart.setOption(option);
+            lineChart = myChart;
+
+            // Handle resize
+            window.addEventListener('resize', function () {
+                myChart.resize();
+            });
+        }
+
+        // Add a new data point to history
+        function addDataPoint(voltage, current, power) {
+            const now = new Date();
+
+            // Add new data point
+            dataHistory.timestamps.push(now);
+            dataHistory.voltage.push(voltage);
+            dataHistory.current.push(current);
+            dataHistory.power.push(power);
+
+            // Trim history if it exceeds maximum length
+            if (dataHistory.timestamps.length > MAX_HISTORY_LENGTH) {
+                dataHistory.timestamps.shift();
+                dataHistory.voltage.shift();
+                dataHistory.current.shift();
+                dataHistory.power.shift();
+            }
+
+            // Update the line chart
+            updateLineChart();
+        }
+
+        // Update the gauge charts
+        function updateCharts(voltage, current, power) {
+            // Check if charts exist before updating
+            if (!voltageGauge || !currentGauge || !powerGauge) {
+                console.warn('Attempting to update charts that are not initialized. Initializing now...');
+                initializeCharts();
+            }
+
+            // Now update the charts
+            if (voltageGauge) {
+                try {
+                    voltageGauge.setOption({
+                        series: [
+                            {
+                                data: [
+                                    {
+                                        value: voltage
+                                    }
+                                ]
+                            }
+                        ]
+                    });
+                } catch (e) {
+                    console.error('Error updating voltage gauge:', e);
+                }
+            }
+
+            if (currentGauge) {
+                try {
+                    currentGauge.setOption({
+                        series: [
+                            {
+                                data: [
+                                    {
+                                        value: current
+                                    }
+                                ]
+                            }
+                        ]
+                    });
+                } catch (e) {
+                    console.error('Error updating current gauge:', e);
+                }
+            }
+
+            if (powerGauge) {
+                try {
+                    powerGauge.setOption({
+                        series: [
+                            {
+                                data: [
+                                    {
+                                        value: power
+                                    }
+                                ]
+                            }
+                        ]
+                    });
+                } catch (e) {
+                    console.error('Error updating power gauge:', e);
+                }
+            }
+        }
+
+        // Update the line chart with current data history
+        function updateLineChart() {
+            if (!lineChart) {
+                console.warn('Attempting to update line chart that is not initialized');
+                return;
+            }
+
+            try {
+                const voltageData = dataHistory.timestamps.map((t, i) => [t, dataHistory.voltage[i]]);
+                const currentData = dataHistory.timestamps.map((t, i) => [t, dataHistory.current[i]]);
+
+                lineChart.setOption({
+                    series: [
+                        {
+                            data: voltageData
+                        },
+                        {
+                            data: currentData
+                        }
+                    ]
+                });
+            } catch (e) {
+                console.error('Error updating line chart:', e);
+            }
+        }
+
+        // Connection event handling improved
+        // Instead of using timeouts, we'll handle chart initialization in connection success callbacks
+
+        // This function will be called when a connection is successfully established
+        function onConnectionSuccess(connectionType) {
+            console.log(`${connectionType} connection successful - initializing charts`);
+
+            // Destroy any existing charts before creating new ones
+            destroyCharts();
+
+            // Initialize new charts
+            initializeCharts();
+
+            // Update the connection status
+            updateConnectionStatus(true);
+        }
+
+        // No changes to the click event listeners, as they just start the connection process
+        // The actual chart initialization will happen in the connection callback
+
+        // Reset charts functionality - will be called within the main disconnect event handler
+        function resetDisplayValues() {
+            // Destroy all charts
+            destroyCharts();
+
+            // Reset all display values
+            document.getElementById('voltageValue').textContent = '-- V';
+            document.getElementById('currentValue').textContent = '-- A';
+            document.getElementById('powerValue').textContent = '-- W';
+            document.getElementById('resistanceValue').textContent = '--';
+            document.getElementById('group0mAh').textContent = '-- mAh';
+            document.getElementById('group0mWh').textContent = '-- mWh';
+            document.getElementById('group1mAh').textContent = '-- mAh';
+            document.getElementById('group1mWh').textContent = '-- mWh';
+            document.getElementById('dPlusVoltage').textContent = '-- V';
+            document.getElementById('dMinusVoltage').textContent = '-- V';
+            document.getElementById('productInfo').textContent = '--';
+            document.getElementById('versionInfo').textContent = '--';
+            document.getElementById('serialInfo').textContent = '--';
+            document.getElementById('runsInfo').textContent = '--';
+            document.getElementById('temperatureInfo').textContent = '-- °C';
+        }
+
+        // Helper function to destroy all charts
+        function destroyCharts() {
+            if (voltageGauge) {
+                voltageGauge.dispose();
+                voltageGauge = null;
+            }
+            if (currentGauge) {
+                currentGauge.dispose();
+                currentGauge = null;
+            }
+            if (powerGauge) {
+                powerGauge.dispose();
+                powerGauge = null;
+            }
+            if (lineChart) {
+                lineChart.dispose();
+                lineChart = null;
+            }
+
+            // Clear history
+            dataHistory.timestamps = [];
+            dataHistory.voltage = [];
+            dataHistory.current = [];
+            dataHistory.power = [];
+        }
+
+        // Update connection status indicator
+        function updateConnectionStatus(connected) {
+            const indicator = document.getElementById('connectionIndicator');
+            const status = document.getElementById('connectionStatus');
+
+            if (connected) {
+                indicator.className = 'status-indicator status-connected';
+                status.textContent = 'Connected';
+            } else {
+                indicator.className = 'status-indicator status-disconnected';
+                status.textContent = 'Disconnected';
+            }
+        }
+
+        // Update the connection status based on active connections
+        function checkAndUpdateConnectionStatus() {
+            const isBtConnected = device && device.gatt.connected;
+            const isUsbConnected = !!usbPort;
+
+            updateConnectionStatus(isBtConnected || isUsbConnected);
+        }
+
+        // Call periodically to update connection status
+        setInterval(checkAndUpdateConnectionStatus, 1000);
+
+        // Initialize the connection indicator as disconnected
+        updateConnectionStatus(false);
+
+        // Ensure the charts are properly initialized on window resize and device orientation changes
+        window.addEventListener('resize', function () {
+            // Only resize if charts exist
+            if (voltageGauge) voltageGauge.resize();
+            if (currentGauge) currentGauge.resize();
+            if (powerGauge) powerGauge.resize();
+            if (lineChart) lineChart.resize();
+        });
+
+        // Also handle device orientation change
+        window.addEventListener('orientationchange', function () {
+            // Use a timeout to ensure the browser has completed the orientation change
+            setTimeout(function () {
+                if (voltageGauge) voltageGauge.resize();
+                if (currentGauge) currentGauge.resize();
+                if (powerGauge) powerGauge.resize();
+                if (lineChart) lineChart.resize();
+            }, 300);
+        });
+    </script>
+</body>
+
+</html>
