@@ -2,6 +2,10 @@
 
 A web-based interface for monitoring real-time electrical parameters of the TC66C device. It displays voltage, current, power, energy consumption, resistance, USB data-line voltages, and detailed device info.
 
+## Screenshot
+
+![TC66C Dashboard Screenshot](./screenshots/dashboard.png)
+
 ## Features
 
 - Real-time measurements: Voltage (V), Current (A), Power (W)  
