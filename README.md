@@ -4,7 +4,7 @@ A web-based interface for monitoring real-time electrical parameters of the TC66
 
 ## Screenshot
 
-![TC66C Dashboard Screenshot](./screenshots/dashboard.png)
+![TC66C Dashboard Screenshot](cubinet-code.github.io_TC66C_.png)
 
 ## Features
 
